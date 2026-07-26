@@ -44,33 +44,6 @@ end
 
 local random32 = random_next
 
-local function detect()
-	local cx, cy, mem_row_count, core_count, machine_id
-	for id in sim.parts() do
-		if sim.partProperty(id, "ctype") == 0x1864A205 and sim.partProperty(id, "type") == elem.DEFAULT_PT_QRTZ then
-			local x, y = sim.partPosition(id)
-			machine_id = sim.partProperty(sim.partID(x - 1, y), "ctype")
-			cx, cy = x, y
-			local arr = {}
-			while true do
-				x = x + 1
-				local value = sim.partProperty(sim.partID(x, y), "ctype")
-				if value == 0 then
-					break
-				end
-				table.insert(arr, string.char(value))
-			end
-			local str = table.concat(arr)
-			mem_row_count, core_count = assert(str:match("^R4A(..)(..)$"))
-			mem_row_count = tonumber(mem_row_count)
-			core_count = tonumber(core_count)
-			break
-		end
-	end
-	assert(mem_row_count)
-	return cx, cy, mem_row_count, core_count, machine_id
-end
-
 local function pick_random(tbl)
 	local which_weight
 	do
