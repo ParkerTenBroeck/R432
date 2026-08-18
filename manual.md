@@ -10,6 +10,9 @@ Check out [the showcase save][004] in your browser. This is an R4A0416M, see [Nu
 > Ordinal numbers throughout this manual start at 0, yielding odd-looking constructs such as *0th* and *bit 0*, the least significant bit. For clarity's sake the English word *first* is never used to refer to ordinals.
 
 > [!note]
+> Unless stated otherwise, row, column, and other spatial indices always increase from top to bottom and from left to right, as appropriate for the kind of index.
+
+> [!note]
 > Instruction spellings and expansions reflect the state of integration with [TPTASM][003].
 
 > [!tip]
