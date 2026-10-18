@@ -1,7 +1,7 @@
 pub type Frame = u32;
 
 pub fn now() -> Frame {
-    crate::mmio::frame_clock.read()
+    super::mmio::frame_clock.read()
 }
 
 pub fn sleep_until(frame: Frame) {

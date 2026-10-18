@@ -3,6 +3,10 @@ pkgs.mkShell {
   packages = with pkgs; [
     rustup
     cargo-binutils
+
+    the-powder-toy
+
+    luajit
   ];
 
 

@@ -1,4 +1,30 @@
 use super::*;
+use core::cell::UnsafeCell;
+
+// R432 has one instruction stream and no interrupts, so this cannot be accessed concurrently.
+struct KeyHistory(UnsafeCell<u8>);
+
+unsafe impl Sync for KeyHistory {}
+
+impl KeyHistory {
+    const fn new() -> Self {
+        Self(UnsafeCell::new(0))
+    }
+
+    #[inline(always)]
+    fn get(&self) -> u8 {
+        // SAFETY: the R432 has a single instruction stream and no interrupts.
+        unsafe { *self.0.get() }
+    }
+
+    #[inline(always)]
+    fn set(&self, key: u8) {
+        // SAFETY: the R432 has a single instruction stream and no interrupts.
+        unsafe { *self.0.get() = key };
+    }
+}
+
+static LAST_BLOCKING_KEY: KeyHistory = KeyHistory::new();
 
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
@@ -18,7 +44,7 @@ impl Range {
 
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-pub enum Colour {
+pub enum Color {
     #[default]
     C0,
     C1,
@@ -40,23 +66,28 @@ pub enum Colour {
 
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-pub struct CellColour(u32);
+pub struct CellColor(u32);
 
-impl CellColour {
+impl CellColor {
     #[inline(always)]
-    pub const fn new(foreground: Colour, background: Colour) -> Self {
+    pub const fn new(foreground: Color, background: Color) -> Self {
         Self(foreground as u32 | ((background as u32) << 4))
+    }
+
+    #[inline(always)]
+    pub const fn bits(self) -> u32 {
+        self.0
     }
 }
 
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-pub struct CursorPosition(u32);
+pub struct CursorPos(u32);
 
-impl CursorPosition {
+impl CursorPos {
     #[inline(always)]
-    pub const fn new(column: u8, row: u8) -> Self {
-        Self(column as u32 | ((row as u32) << 5))
+    pub const fn new(x: u8, y: u8) -> Self {
+        Self(x as u32 | ((y as u32) << 5))
     }
 
     #[inline(always)]
@@ -76,12 +107,12 @@ pub struct PixelPos {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub struct Pixel {
     pub pos: PixelPos,
-    pub color: Colour,
+    pub color: Color,
 }
 
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-pub struct ScrollprintFlags(u32);
+pub struct ScrollprintFlags(u8);
 
 impl ScrollprintFlags {
     pub const POS_IN_DATA: Self = Self(1 << 6);
@@ -89,7 +120,7 @@ impl ScrollprintFlags {
     pub const TERM_MODE_SCROLL: Self = Self(1 << 4);
     pub const ENABLE_SCROLLMASK: Self = Self(1 << 3);
     pub const COLUMN_ORIENTED: Self = Self(1 << 2);
-    pub const COLOUR_IN_DATA: Self = Self(1 << 1);
+    pub const COLOR_IN_DATA: Self = Self(1 << 1);
     pub const TERM_MODE: Self = Self(1 << 0);
 
     pub const SIMPLE_TERMINAL: Self =
@@ -121,8 +152,8 @@ impl ScrollprintFlags {
     }
 
     #[inline(always)]
-    pub const fn colour_in_data() -> Self {
-        Self::COLOUR_IN_DATA
+    pub const fn color_in_data() -> Self {
+        Self::COLOR_IN_DATA
     }
 
     #[inline(always)]
@@ -136,7 +167,7 @@ impl ScrollprintFlags {
     }
 
     #[inline(always)]
-    pub const fn bits(self) -> u32 {
+    pub const fn bits(self) -> u8 {
         self.0
     }
 }
@@ -157,6 +188,12 @@ impl core::ops::BitOrAssign for ScrollprintFlags {
     }
 }
 
+#[repr(u8)]
+pub enum CharMemSide {
+    Top = 0,
+    Bottom = 1,
+}
+
 // ----------------------------------------------
 
 #[repr(C)]
@@ -164,9 +201,9 @@ pub struct Terminal {
     input: reg::R32,
     hrange: reg::W32<Range>,
     vrange: reg::W32<Range>,
-    cursor: reg::W32<CursorPosition>,
+    cursor: reg::W32<CursorPos>,
     nlchar: reg::W32,
-    colour: reg::W32<CellColour>,
+    color: reg::W32<CellColor>,
     scrollmask: reg::W32,
     plotpix: reg::W32<Pixel>,
     padding_1: [reg::Pad32; 0x78],
@@ -189,12 +226,12 @@ impl Terminal {
 
     #[inline(always)]
     pub fn set_cursor_position(&self, column: u8, row: u8) {
-        self.cursor.write(CursorPosition::new(column, row));
+        self.cursor.write(CursorPos::new(column, row));
     }
 
     #[inline(always)]
-    pub fn set_cell_colour(&self, foreground: Colour, background: Colour) {
-        self.colour.write(CellColour::new(foreground, background));
+    pub fn set_cell_color(&self, foreground: Color, background: Color) {
+        self.color.write(CellColor::new(foreground, background));
     }
 
     #[inline(always)]
@@ -205,6 +242,36 @@ impl Terminal {
     #[inline(always)]
     pub fn set_scrollmask(&self, value: u32) {
         self.scrollmask.write(value);
+    }
+
+    #[inline(always)]
+    pub fn print_with_pos(&self, flags: ScrollprintFlags, pos: CursorPos, byte: u8) {
+        self.scrollprint(
+            flags | ScrollprintFlags::pos_in_data(),
+            (pos.bits() << 16) | byte as u32,
+        );
+    }
+
+    #[inline(always)]
+    pub fn print_with_color(&self, flags: ScrollprintFlags, color: CellColor, byte: u8) {
+        self.scrollprint(
+            flags | ScrollprintFlags::color_in_data(),
+            (color.bits() << 8) | byte as u32,
+        );
+    }
+
+    #[inline(always)]
+    pub fn print_with_color_and_pos(
+        &self,
+        flags: ScrollprintFlags,
+        color: CellColor,
+        pos: CursorPos,
+        byte: u8,
+    ) {
+        self.scrollprint(
+            flags | ScrollprintFlags::color_in_data() | ScrollprintFlags::pos_in_data(),
+            (pos.bits() << 16) | (color.bits() << 8) | byte as u32,
+        );
     }
 
     #[inline(always)]
@@ -223,6 +290,22 @@ impl Terminal {
     }
 
     #[inline(always)]
+    pub fn set_char_mem(&self, char: u8, side: CharMemSide, bitmap: [u8; 4]) {
+        self.char_mem[((char as usize) << 1) | side as usize].write(u32::from_ne_bytes(bitmap));
+    }
+
+    #[inline(always)]
+    pub fn set_char_mem_whole(&self, char: u8, bitmap: [u8; 8]) {
+        // kind of a stupid hack but whatever
+        self.set_char_mem(char, CharMemSide::Top, (bitmap[0..4]).try_into().unwrap());
+        self.set_char_mem(
+            char,
+            CharMemSide::Bottom,
+            (bitmap[4..8]).try_into().unwrap(),
+        );
+    }
+
+    #[inline(always)]
     pub fn read_keyboard(&self) -> u32 {
         self.input.read()
     }
@@ -230,14 +313,24 @@ impl Terminal {
     #[inline(always)]
     pub fn reset_keyboard(&self) {
         let _ = self.read_keyboard();
+        LAST_BLOCKING_KEY.set(0);
     }
 
-    #[inline(always)]
+    #[inline(never)]
     pub fn read_blocking(&self) -> u32 {
+        // A repeated key already waiting at function entry is stale bounce. Once polling begins,
+        // the same key is accepted again so intentional repeated coordinates still work.
+        let pending = self.read_keyboard();
+        if pending & 0xFF != 0 && pending as u8 != LAST_BLOCKING_KEY.get() {
+            LAST_BLOCKING_KEY.set(pending as u8);
+            return pending;
+        }
+
         loop {
             let got = self.read_keyboard();
 
             if got & 0xFF != 0 {
+                LAST_BLOCKING_KEY.set(got as u8);
                 return got;
             }
         }

@@ -3,10 +3,10 @@ set -euo pipefail
 
 TARGET="riscv32i-unknown-none-elf"
 PROFILE="release"
-NAME="showcase"
+NAME="powder"
 OBJCOPY="rust-objcopy"
 
-cargo build --release --target "${TARGET}"
+cargo build --release -p powder --target "${TARGET}"
 
 ELF="target/${TARGET}/${PROFILE}/${NAME}"
 BIN="target/${TARGET}/${PROFILE}/${NAME}.bin"

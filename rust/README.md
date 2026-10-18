@@ -18,33 +18,18 @@ rustup component add llvm-tools --toolchain stable
 cargo install cargo-binutils
 ```
 
-# Building
-
-> [!NOTE]
-> When building you will get a warning for an unknown feature. This is fine
+The native frontend accepts White and Black controller modes as positional
+arguments. Available modes are `player`, `ai-rand`, `ai-greed`, and
+`ai-lookahead-1` through `ai-lookahead-15`; both default to `ai-greed` when
+omitted. Player moves use coordinate notation such as `e2e4`.
 
 ```shell
-./build.sh
+cargo run-native -- player ai-greed
+cargo run-native -- ai-rand player
 ```
-
-# Making your own.
-
-Clone this directory
-
-To change name edit 
-
-`build.sh`
-```bash
-NAME="<name>"
-```
-`Cargo.toml`
-```toml
-name = "<name>"
-```
-they *must* match
-
-Hardware defined in `config.lua` must manually be synced with `hardware.ld`. `mmio/mod.rs` must have the correct types / link names to reflect `hardware.ld`
 
 # Loading
 
-Edit `config.lua` (the config this demo expects) and replace `<BIN PATH>` with the abs path printed by the build script, and `/path/to/r4plot.lua` to the abs path of the `r4plot.lua` file. Paste the result into TPT console 
+`cargo run-powder` builds the Powder frontend, converts it to a raw image, and launches The Powder Toy with `config.lua`. Run `./build.sh` instead when only the raw image is needed.
+
+> you need r4plot.lua in this dir for the cargo run commands to work properly

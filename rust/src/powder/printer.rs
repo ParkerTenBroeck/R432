@@ -1,11 +1,14 @@
-use crate::mmio::term::{Colour, ScrollprintFlags, Terminal};
+use super::{
+    mmio::term::{Color, ScrollprintFlags, Terminal},
+    time,
+};
 
 pub struct Printer<'a> {
     terminal: &'a Terminal,
     cursor_x: u8,
     cursor_y: u8,
-    colour_fg: Colour,
-    colour_bg: Colour,
+    color_fg: Color,
+    color_bg: Color,
     width: u8,
     height: u8,
 }
@@ -23,8 +26,8 @@ impl<'a> Printer<'a> {
             terminal,
             cursor_x: 0,
             cursor_y: 0,
-            colour_fg: Colour::C15,
-            colour_bg: Colour::C0,
+            color_fg: Color::C15,
+            color_bg: Color::C0,
             width,
             height,
         }
@@ -32,7 +35,7 @@ impl<'a> Printer<'a> {
 
     pub fn init(&mut self) {
         self.terminal.reset_keyboard();
-        self.terminal.set_cell_colour(self.fg(), self.bg());
+        self.terminal.set_cell_color(self.fg(), self.bg());
         self.terminal.set_horizontal_range(0, self.width - 1);
         self.terminal.set_vertical_range(0, self.height - 1);
         self.terminal.set_cursor_position(0, 0);
@@ -132,13 +135,13 @@ impl<'a> Printer<'a> {
     }
 
     #[inline(always)]
-    pub const fn fg(&self) -> Colour {
-        self.colour_fg
+    pub const fn fg(&self) -> Color {
+        self.color_fg
     }
 
     #[inline(always)]
-    pub const fn bg(&self) -> Colour {
-        self.colour_bg
+    pub const fn bg(&self) -> Color {
+        self.color_bg
     }
 
     #[inline(always)]
@@ -152,11 +155,11 @@ impl<'a> Printer<'a> {
     }
 
     #[inline(always)]
-    pub fn set_colour(&mut self, foreground: Colour, background: Colour) {
-        self.colour_fg = foreground;
-        self.colour_bg = background;
+    pub fn set_color(&mut self, foreground: Color, background: Color) {
+        self.color_fg = foreground;
+        self.color_bg = background;
         self.terminal
-            .set_cell_colour(self.colour_fg, self.colour_bg);
+            .set_cell_color(self.color_fg, self.color_bg);
     }
 
     #[inline(always)]
@@ -168,17 +171,17 @@ impl<'a> Printer<'a> {
     }
 
     pub fn get_char_blink(&mut self) -> u32 {
-        const SLEEP_FRAMES: crate::time::Frame = 30;
+        const SLEEP_FRAMES: time::Frame = 30;
 
-        let mut fg = self.colour_fg;
-        let mut bg = self.colour_bg;
+        let mut fg = self.color_fg;
+        let mut bg = self.color_bg;
 
         loop {
             let ch = self.terminal.read_keyboard();
 
             if ch != 0 {
                 self.terminal
-                    .set_cell_colour(self.colour_fg, self.colour_bg);
+                    .set_cell_color(self.color_fg, self.color_bg);
                 self.terminal
                     .set_cursor_position(self.cursor_x, self.cursor_y);
                 self.terminal.print_byte(ScrollprintFlags::TERM_MODE, b' ');
@@ -187,12 +190,12 @@ impl<'a> Printer<'a> {
                 return ch;
             }
 
-            self.terminal.set_cell_colour(fg, bg);
+            self.terminal.set_cell_color(fg, bg);
             self.terminal
                 .set_cursor_position(self.cursor_x, self.cursor_y);
             self.terminal.print_byte(ScrollprintFlags::TERM_MODE, b' ');
 
-            crate::time::sleep_for(SLEEP_FRAMES);
+            time::sleep_for(SLEEP_FRAMES);
             core::mem::swap(&mut fg, &mut bg);
         }
     }

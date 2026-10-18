@@ -1,23 +1,32 @@
 [package]
-name = "showcase"
+name = "powder"
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
-fix = "0.1.1"
+[[bin]]
+name = "powder"
+path = "src/powder_main.rs"
+test = false
+bench = false
 
-linked_list_allocator = { version = "0.10.5", default-features = false, optional = true }
-
-[features]
-default = []
-alloc = ["dep:linked_list_allocator"]
+[[bin]]
+name = "native"
+path = "src/native_main.rs"
+required-features = [ "native" ]
 
 [profile.release]
 panic = "abort"
-opt-level = "z"
-lto = true
+opt-level = 3
+lto = "fat"
 codegen-units = 1
-
 
 [profile.dev]
 panic = "abort"
+
+[features]
+default = [ ]
+native = [ "dep:rand" ]
+
+[dependencies]
+rand = { version = "0.10.3", optional = true }
+
