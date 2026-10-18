@@ -4,6 +4,7 @@ use super::*;
 
 
 #[derive(Clone, Copy)]
+#[repr(align(4))]
 pub struct MoveList<const L: usize = 28> {
     moves: [MaybeUninit<PackedMoveKind>; L],
     len: u8,
