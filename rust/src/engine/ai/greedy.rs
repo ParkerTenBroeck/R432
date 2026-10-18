@@ -1,6 +1,7 @@
 use crate::engine::{
     Engine, BoardMove, MoveKind, Move,
     board::{Cell, Idx, PieceColor, Tile},
+    moves::KNIGHT_DIRS,
 };
 
 use super::xorshift;
@@ -244,8 +245,9 @@ impl Greedy {
 
         if moved != Tile::king(color) {
             let opponent = color.opposite();
-            let attacked = engine.will_cell_be_attacked(from, to, opponent);
-
+            let attacked = engine.is_attacked_by_pawn(from, to, opponent)
+                || engine.is_attacked_by_steps(from, to, &KNIGHT_DIRS, Tile::knight(opponent))
+                || (!captured.is_empty() && engine.will_cell_be_attacked(from, to, opponent));
             if attacked {
                 score -= Self::piece_value(moved) * 8;
             }

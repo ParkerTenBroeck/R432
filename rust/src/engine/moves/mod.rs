@@ -425,39 +425,23 @@ impl Engine {
         to: Cell,
         attacker: PieceColor,
     ) -> bool {
-        for &cell in self.pieces(attacker) {
-            if cell == to {
-                continue;
-            }
-
-            let dx = to.x() as i8 - cell.x() as i8;
-            let dy = to.y() as i8 - cell.y() as i8;
-            let ax = dx.unsigned_abs();
-            let ay = dy.unsigned_abs();
-
-            let attacks = match self.tile_at(cell) {
-                Tile::WhitePawn | Tile::BlackPawn => ax == 1 && dy == attacker.pawn_dir(),
-                Tile::WhiteKnight | Tile::BlackKnight => matches!((ax, ay), (1, 2) | (2, 1)),
-                Tile::WhiteKing | Tile::BlackKing => ax.max(ay) == 1,
-                Tile::WhiteBishop | Tile::BlackBishop if ax == ay => {
-                    self.ray_reaches_after_move(cell, to, from, dx.signum(), dy.signum())
-                }
-                Tile::WhiteRook | Tile::BlackRook if dx == 0 || dy == 0 => {
-                    self.ray_reaches_after_move(cell, to, from, dx.signum(), dy.signum())
-                }
-                Tile::WhiteQueen | Tile::BlackQueen
-                    if dx == 0 || dy == 0 || ax == ay =>
-                {
-                    self.ray_reaches_after_move(cell, to, from, dx.signum(), dy.signum())
-                }
-                _ => false,
-            };
-            if attacks {
-                return true;
-            }
-        }
-
-        false
+        self.is_attacked_by_pawn(from, to, attacker)
+            || self.is_attacked_by_steps(from, to, &KNIGHT_DIRS, Tile::knight(attacker))
+            || self.is_attacked_by_steps(from, to, &KING_DIRS, Tile::king(attacker))
+            || self.is_attacked_by_rays(
+                from,
+                to,
+                &BISHOP_DIRS,
+                Tile::bishop(attacker),
+                Tile::queen(attacker),
+            )
+            || self.is_attacked_by_rays(
+                from,
+                to,
+                &ROOK_DIRS,
+                Tile::rook(attacker),
+                Tile::queen(attacker),
+            )
     }
 
     pub fn move_gives_check(
@@ -604,22 +588,65 @@ impl Engine {
         false
     }
 
-    fn ray_reaches_after_move(
-        &self,
-        mut scan: Cell,
-        to: Cell,
-        from: Cell,
-        dx: i8,
-        dy: i8,
-    ) -> bool {
-        while let Some(next) = scan.offset(dx, dy) {
-            if next == to {
+    pub fn is_attacked_by_pawn(&self, from: Cell, to: Cell, attacker: PieceColor) -> bool {
+        let (dy, pawn) = match attacker {
+            PieceColor::White => (1, Tile::WhitePawn),
+            PieceColor::Black => (-1, Tile::BlackPawn),
+        };
+
+        for dx in [-1, 1] {
+            if let Some(attacker_cell) = to.offset(dx, dy)
+                && self.tile_at_after_move(attacker_cell, from, to) == pawn
+            {
                 return true;
             }
-            if !self.tile_at_after_move(next, from, to).is_empty() {
+        }
+
+        false
+    }
+
+    pub fn is_attacked_by_steps(
+        &self,
+        from: Cell,
+        to: Cell,
+        dirs: &[(i8, i8)],
+        piece: Tile,
+    ) -> bool {
+        for &(dx, dy) in dirs {
+            if let Some(attacker_cell) = to.offset(dx, dy)
+                && self.tile_at_after_move(attacker_cell, from, to) == piece
+            {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub fn is_attacked_by_rays(
+        &self,
+        from: Cell,
+        to: Cell,
+        dirs: &[(i8, i8)],
+        piece: Tile,
+        queen: Tile,
+    ) -> bool {
+        for &(dx, dy) in dirs {
+            let mut scan = to;
+
+            while let Some(next) = scan.offset(dx, dy) {
+                let tile = self.tile_at_after_move(next, from, to);
+                if tile.is_empty() {
+                    scan = next;
+                    continue;
+                }
+
+                if tile == piece || tile == queen {
+                    return true;
+                }
+
                 break;
             }
-            scan = next;
         }
 
         false
