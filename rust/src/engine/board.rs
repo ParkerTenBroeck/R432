@@ -141,7 +141,7 @@ impl BoardMove {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Board {
-    board: [u32; 8],
+    board: [Tile; 64],
 }
 
 #[repr(transparent)]
@@ -233,16 +233,33 @@ impl Default for Board {
     #[inline]
     #[rustfmt::skip]
     fn default() -> Self {
+        use Tile::{
+            BlackBishop as BB,
+            BlackRook as BR,
+            BlackKnight as BN,
+            BlackKing as BK,
+            BlackQueen as BQ,
+            BlackPawn as BP,
+
+            WhiteBishop as WB,
+            WhiteRook as WR,
+            WhiteKnight as WN,
+            WhiteKing as WK,
+            WhiteQueen as WQ,
+            WhitePawn as WP,
+
+            Empty as E,
+        };
         Self {
             board: [
-                0xA98CB89A,
-                0x77777777,
-                0x00000000,
-                0x00000000,
-                0x00000000,
-                0x00000000,
-                0x11111111,
-                0x43265234,
+                BR, BN, BB, BQ, BK, BB, BN, BR,
+                BP, BP, BP, BP, BP, BP, BP, BP,
+                E,  E,  E,  E,  E,  E,  E,  E,
+                E,  E,  E,  E,  E,  E,  E,  E,
+                E,  E,  E,  E,  E,  E,  E,  E,
+                E,  E,  E,  E,  E,  E,  E,  E,
+                WP, WP, WP, WP, WP, WP, WP, WP,
+                WR, WN, WB, WQ, WK, WB, WN, WR,
             ],
         }
     }
@@ -251,17 +268,11 @@ impl Default for Board {
 impl Board {
     #[inline(always)]
     pub fn get(&self, x: impl Into<Idx>, y: impl Into<Idx>) -> Tile {
-        let raw = (self.board[y.into() as usize] >> (x.into() as u8 * 4)) & 0xF;
-        // SAFETY: Tile exhaustively represents every four-bit value.
-        unsafe { core::mem::transmute(raw as u8) }
+        self.board[Cell::new(x, y).index() as usize]
     }
 
     #[inline(always)]
     pub fn set(&mut self, x: impl Into<Idx>, y: impl Into<Idx>, tile: Tile) {
-        let y = y.into() as usize;
-        let x = x.into() as u8;
-        // The compiler *should* know that these are always in bounds... 
-        self.board[y] &= !(0xF << (x * 4));
-        self.board[y] |= (tile as u32) << (x * 4);
+        self.board[Cell::new(x, y).index() as usize] = tile;
     }
 }
